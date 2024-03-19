@@ -319,6 +319,9 @@ https://grafana.com/grafana/dashboards/1860-node-exporter-full/
 
     Select Prometheus as the data source and import the dashboard. 
 
+you will see something like this
+![alt text](image-26.png)
+
 
 
 ## INSTALL PUSHGATEWAY
@@ -569,12 +572,142 @@ Now, update alertmanager.yml config to include a new route to send alerts to the
 
 sudo nano /etc/alertmanager/alertmanager.yml
 
+cat /etc/alertmanager/alertmanager.yml 
+```
+---
+route:
+  group_by: ['alertname']
+  group_wait: 30s
+  group_interval: 1m
+  repeat_interval: 10m
+  receiver: 'web.hook'
+  routes:
+  - receiver: slack-notifications
+    match:
+      severity: warning
+receivers:
+- name: 'web.hook'
+  webhook_configs:
+  - url: 'http://127.0.0.1:5001/'
+- name: slack-notifications
+  slack_configs:
+  - channel: "#monitoringdevops"
+    send_resolved: true
+    api_url: "https://hooks.slack.com/services/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"
+    title: "{{ .GroupLabels.alertname }}"
+    text: "{{ range .Alerts }}{{ .Annotations.message }}\n{{ end }}"
+inhibit_rules:
+  - source_match:
+      severity: 'critical'
+    target_match:
+      severity: 'warning'
+    equal: ['alertname', 'dev', 'instance']
+
+```
+
 
 
 ![FINALL OUTPUT](image-25.png)
 
 
+## Since you can see your grafana dashboard but you want to automate the process of alerting so for that we will create a batch-job-rule.yml file
 
+```
+sudo nano batch-job-rules.yml
+
+groups:
+- name: batch-job-rules
+  rules:
+  - alert: Ignore!
+    annotations:
+      message: Testing Server Alerting by Maheboob.
+    expr: jenkins_job_duration_seconds{job="backup"} > 30
+    for: 5s
+    labels:
+      severity: warning
+
+  - alert: HighCpuUsage
+    expr: (100 - (avg by (instance) (irate(node_cpu_seconds_total{mode="idle"}[5m])) * 100)) > 5
+    for: 5s
+    labels:
+      severity: warning
+    annotations:
+      summary: "High CPU Usage Detected"
+      message: "CPU usage is more than 5% for 5 seconds."
+
+  - alert: HighRamUsage
+    expr: (node_memory_MemTotal_bytes - node_memory_MemAvailable_bytes) / node_memory_MemTotal_bytes * 100 > 50
+    for: 5s
+    labels:
+      severity: warning
+    annotations:
+      summary: "High RAM Usage Detected"
+      message: "RAM usage is more than 50% for 5 seconds."
+```
+
+and edit the prometheus.yml as well
+
+```
+
+# my global config
+global:
+  scrape_interval: 10s # Set the scrape interval to every 15 seconds. Default is every 1 minute.
+  evaluation_interval: 10s # Evaluate rules every 15 seconds. The default is every 1 minute.
+  # scrape_timeout is set to the global default (10s).
+
+# Alertmanager configuration
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets:
+           - localhost:9093
+
+# Load rules once and periodically evaluate them according to the global 'evaluation_interval'.
+rule_files:
+  - dead-mans-snitch-rule.yml
+  - batch-job-rules.yml
+
+  # - "first_rules.yml"
+  # - "second_rules.yml"
+
+# A scrape configuration containing exactly one endpoint to scrape:
+# Here it's Prometheus itself.
+scrape_configs:
+  # The job name is added as a label `job=<job_name>` to any timeseries scraped from this config.
+  - job_name: "prometheus"
+
+    # metrics_path defaults to '/metrics'
+    # scheme defaults to 'http'.
+    basic_auth:
+      username: admin
+      password: Devops@123
+    static_configs:
+      - targets: ["localhost:9090"]
+
+  - job_name: "node_export"
+    static_configs:
+      - targets: ["localhost:9100"]
+
+  - job_name: pushgateway
+    honor_labels: true
+    static_configs:
+      - targets: ["localhost:9091"]
+```
+
+now just run these commands
+```
+promtool check config /etc/prometheus/prometheus.yml
+
+curl -X POST -u admin:Devops@123 http://localhost:9090/-/reload
+
+sudo systemctl daemon-reload
+
+
+```
+
+
+and you can see notification in the configured channel whenever there is high cpu or ram utilization:
+![alt text](image-27.png)
 
 
 
