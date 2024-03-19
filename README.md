@@ -610,7 +610,10 @@ inhibit_rules:
 ![FINALL OUTPUT](image-25.png)
 
 
-## Since you can see your grafana dashboard but you want to automate the process of alerting so for that we will create a batch-job-rule.yml file
+## High CPU and RAM usage Alerting 
+
+* Since you can see your grafana dashboard but you want to automate the 
+* process of alerting so for that we will create a batch-job-rule.yml file
 
 ```
 sudo nano batch-job-rules.yml
